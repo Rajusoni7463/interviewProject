@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   Heart,
   Utensils,
@@ -9,7 +10,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-import { db, storage } from "@/config/firebase";
+import { db,  } from "@/config/firebase";
 
 import {
   addDoc,
@@ -56,20 +57,94 @@ export default function CreatePostPage() {
   const [category, setCategory] =
     useState("wellness");
 
-  const [tags, setTags] = useState([
-    "Gluten-Free Baking",
-    "Kids",
-    "Gut Health",
-    "Meal Planning",
-  ]);
+const [tags, setTags] = useState<string[]>([]);
+const [tagInput, setTagInput] = useState("");
 
-  const [files, setFiles] = useState<File[]>([]);
+const [files, setFiles] = useState<File[]>([]);
+const [previews, setPreviews] = useState<string[]>([]);
 const [loading, setLoading] = useState(false);
+const handleImageChange = (
+  e: React.ChangeEvent<HTMLInputElement>
+) => {
+  if (!e.target.files) return;
+
+  const selectedFiles = Array.from(e.target.files);
+
+if (files.length + selectedFiles.length > 5) {
+  toast.error("You can upload maximum 5 images");
+  return;
+}
+
+  const updatedFiles = [...files, ...selectedFiles];
+
+  setFiles(updatedFiles);
+
+  const previewUrls = updatedFiles.map((file) =>
+    URL.createObjectURL(file)
+  );
+
+  setPreviews(previewUrls);
+};
+
+const removeImage = (index: number) => {
+  const updatedFiles = files.filter(
+    (_, i) => i !== index
+  );
+
+  const updatedPreviews = previews.filter(
+    (_, i) => i !== index
+  );
+
+  setFiles(updatedFiles);
+  setPreviews(updatedPreviews);
+};
+const addTag = () => {
+  const value = tagInput.trim();
+
+  if (!value) return;
+
+  if (tags.includes(value)) {
+    toast.error("Tag already exists");
+    return;
+  }
+
+  if (tags.length >= 10) {
+    toast.error("Maximum 10 tags allowed");
+    return;
+  }
+
+  setTags([...tags, value]);
+  setTagInput("");
+};
+
+const removeTag = (tag: string) => {
+  setTags(tags.filter((item) => item !== tag));
+};
+const handleTagKeyDown = (
+  e: React.KeyboardEvent<HTMLInputElement>
+) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    addTag();
+  }
+};
+
+useEffect(() => {
+  return () => {
+    previews.forEach((url) =>
+      URL.revokeObjectURL(url)
+    );
+  };
+}, [previews]);
+
 
 const publishPost = async () => {
   try {
     setLoading(true);
-
+    if (tags.length === 0) {
+  toast.error("Please add at least one tag");
+  return;
+}
     const imageUrls = await Promise.all(
   files.map(async (file) => {
     const formData = new FormData();
@@ -100,14 +175,15 @@ const publishPost = async () => {
       createdAt: serverTimestamp(),
     });
 
-    alert("Post Published Successfully");
+    toast.success("Post published successfully");
 
     setTitle("");
     setContent("");
     setFiles([]);
+setPreviews([]);
   } catch (error) {
     console.error(error);
-    alert("Something went wrong");
+    toast.error("Something went wrong");
   } finally {
     setLoading(false);
   }
@@ -219,41 +295,110 @@ const publishPost = async () => {
               />
             </div>
 
-            <div>
-              <label className="mb-2 block font-medium text-black ">
-                Add Photos
-              </label>
+<div>
+  <div className="mb-2 flex items-center justify-between">
+    <label className="font-medium text-black">
+      Add Photos (Up to 5)
+    </label>
 
-              <div className="flex h-52 items-center justify-center rounded-xl border-2 border-dashed text-black">
-               <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={(e) => {
-                    if (!e.target.files) return;
+    <span className="text-sm text-green-600">
+      {files.length}/5 Images
+    </span>
+  </div>
 
-                    setFiles(Array.from(e.target.files));
-                  }}
-                />
-              </div>
-            </div>
+  <div className="rounded-xl border-2 border-dashed p-6">
+    <label className="flex h-40 cursor-pointer flex-col items-center justify-center">
+      <div className="text-center">
+        <p className="text-lg font-medium text-black">
+          Click to Upload Images
+        </p>
 
-            <div>
-              <label className="mb-3 block font-medium text-black">
-                Tags
-              </label>
+        <p className="mt-2 text-sm text-gray-500">
+          JPG, PNG, WEBP • Max 5 Images
+        </p>
+      </div>
 
-              <div className="flex flex-wrap gap-2">
-                {tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full bg-gray-100 px-4 py-2 text-sm text-black "
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </div>
+      <input
+        hidden
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={handleImageChange}
+      />
+    </label>
+  </div>
+
+  {previews.length > 0 && (
+    <div className="mt-4 flex flex-wrap gap-4">
+      {previews.map((preview, index) => (
+        <div
+          key={index}
+          className="relative h-32 w-32 overflow-hidden rounded-xl border"
+        >
+          <img
+            src={preview}
+            alt=""
+            className="h-full w-full object-cover"
+          />
+
+          <button
+            type="button"
+            onClick={() => removeImage(index)}
+            className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-white text-black shadow"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
+<div>
+  <label className="mb-3 block font-medium text-black">
+    Tags
+  </label>
+
+  <div className="flex gap-2">
+    <input
+      type="text"
+      value={tagInput}
+      onChange={(e) =>
+        setTagInput(e.target.value)
+      }
+      onKeyDown={handleTagKeyDown}
+      placeholder="Add a tag"
+      className="flex-1 rounded-xl border p-3 text-black outline-none focus:ring-2 focus:ring-green-500"
+    />
+
+    <button
+      type="button"
+      onClick={addTag}
+      className="rounded-xl bg-green-700 px-5 text-white"
+    >
+      Add
+    </button>
+  </div>
+
+  <div className="mt-4 flex flex-wrap gap-2">
+    {tags.map((tag) => (
+      <div
+        key={tag}
+        className="flex items-center gap-2 rounded-full bg-green-50 px-4 py-2 text-sm text-green-700"
+      >
+        <span>{tag}</span>
+
+        <button
+          type="button"
+          onClick={() => removeTag(tag)}
+          className="font-bold"
+        >
+          ×
+        </button>
+      </div>
+    ))}
+  </div>
+</div>
 
             <div className="flex gap-4 pt-4">
               <button className="rounded-xl border px-6 py-3 font-medium text-black">
